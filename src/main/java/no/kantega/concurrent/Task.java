@@ -26,27 +26,27 @@ import static java.lang.System.out;
  * hence the Async can never block.
  * The Async type is pure except the method execute, which executes the continuation.
  */
-public abstract class Async<A> {
+public abstract class Task<A> {
 
 
-    private Async() {
+    private Task() {
     }
 
     /**
      * Creates an Async that is resolved by a callback.
      *
-     * @param handler The handler that must execute the task, and eventually call the resolver to resolve
+     * @param runner The handler that must execute the task, and eventually call the resolver to resolve
      *                the Async task.
      * @param <A>     The type of the value the task creates asyncronically.
      * @return An async that eventually will produce result.
      */
-    public static <A> Async<A> async(Task<A> handler) {
-        return new Async<A>() {
+    public static <A> Task<A> async(TaskBody<A> runner) {
+        return new Task<A>() {
             @Override
             public void execute(final Effect1<Tried<A>> completeHandler) {
                 out.println( "Running execute" );
                 try {
-                    handler.run( completeHandler::f );
+                    runner.run( completeHandler::f );
                 } catch (Throwable t) {
                     completeHandler.f( Tried.fail( t ) );
                 }
@@ -55,18 +55,18 @@ public abstract class Async<A> {
     }
 
 
-    public static <A> Async<A> fail(Throwable t){
+    public static <A> Task<A> fail(Throwable t){
         return async( aresolver -> aresolver.resolve( Tried.fail( t ) ) );
     }
 
-    public static <A> Async<A> call(final Supplier<A> task) {
+    public static <A> Task<A> call(final Supplier<A> task) {
         return async( validationResolver -> validationResolver.resolve( Tried.value( task.get() ) ) );
     }
 
     /**
      * Puts the argument into a Async.
      */
-    public static <A> Async<A> now(final A a) {
+    public static <A> Task<A> now(final A a) {
         return async( aResolver -> {
             out.println( "Running immediately" );
             aResolver.resolve( Tried.value( a ) );
@@ -77,10 +77,10 @@ public abstract class Async<A> {
      * Creates an async task that is resolved when both tasks are resolved.
      * Uses the first Asyncs startegy to call the continuation. The tasks are run in parallell if permitted by the executor.
      */
-    public static <A, B> Async<P2<A, B>> and(final Async<A> one, final Async<B> other) {
-        return async( p2Resolver -> {
+    public static <A, B> Task<P2<A, B>> and(final Task<A> one, final Task<B> other) {
+        return async( (Resolver<P2<A, B>> p2Resolver) -> {
             EffectSynchronizer<A, B> effectSynchronizer =
-                    new EffectSynchronizer<>( p2Resolver );
+                    new EffectSynchronizer<A,B>( p2Resolver );
             one.execute( effectSynchronizer.leftE() );
             other.execute( effectSynchronizer.rightE() );
         } );
@@ -90,12 +90,12 @@ public abstract class Async<A> {
     /**
      * Runs the async after the given delay
      */
-    public Async<A> delay(Duration duration, final ScheduledExecutorService executorService) {
-        return new Async<A>() {
+    public Task<A> delay(Duration duration, final ScheduledExecutorService executorService) {
+        return new no.kantega.concurrent.Task<A>() {
             @Override
             public void execute(final Effect1<Tried<A>> completeHandler) {
                 out.println( "Scheduling task" );
-                executorService.schedule( () -> Async.this.execute( completeHandler ), duration.toMillis(), TimeUnit.MILLISECONDS );
+                executorService.schedule( () -> Task.this.execute( completeHandler ), duration.toMillis(), TimeUnit.MILLISECONDS );
             }
         };
     }
@@ -108,8 +108,8 @@ public abstract class Async<A> {
      * @param <B> the type the function f produces
      * @return An Async with the result transformed.
      */
-    public <B> Async<B> map(final F<A, B> f) {
-        return async( resolver -> Async.this.execute( a -> resolver.resolve( a.map(f) ) ) );
+    public <B> Task<B> map(final F<A, B> f) {
+        return async( resolver -> Task.this.execute( a -> resolver.resolve( a.map(f) ) ) );
     }
 
     /**
@@ -119,15 +119,15 @@ public abstract class Async<A> {
      * @param <B> the type the next async produces.
      * @return An Async that first executes this task, and then the next task when this task is finished.
      */
-    public <B> Async<B> flatMap(final F<A, Async<B>> f) {
-        return async( resolver -> Async.this.execute( a -> a.map(f).fold( Async::fail, Function.identity() ).execute( resolver::resolve ) ) );
+    public <B> Task<B> flatMap(final F<A, Task<B>> f) {
+        return async( resolver -> Task.this.execute( a -> a.map(f).fold( no.kantega.concurrent.Task::fail, Function.identity() ).execute( resolver::resolve ) ) );
     }
 
 
     /**
      * Run the other Async task after this task completes, disregarding the outcome of the first Async.
      */
-    public <B> Async<B> andThen(final Async<B> other) {
+    public <B> no.kantega.concurrent.Task<B> andThen(final no.kantega.concurrent.Task<B> other) {
         return flatMap( a -> other );
     }
 
@@ -159,7 +159,7 @@ public abstract class Async<A> {
     /**
      * Interface for tasks that are to be run asyncronusly with a callback to resolve the Async.
      */
-    public static interface Task<A> {
+    public static interface TaskBody<A> {
         public void run(Resolver<A> resolver);
     }
 
