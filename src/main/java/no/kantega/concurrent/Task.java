@@ -68,7 +68,6 @@ public abstract class Task<A> {
      */
     public static <A> Task<A> now(final A a) {
         return async( aResolver -> {
-            out.println( "Running immediately" );
             aResolver.resolve( Tried.value( a ) );
         } );
     }
@@ -94,7 +93,6 @@ public abstract class Task<A> {
         return new no.kantega.concurrent.Task<A>() {
             @Override
             public void execute(final Effect1<Tried<A>> completeHandler) {
-                out.println( "Scheduling task" );
                 executorService.schedule( () -> Task.this.execute( completeHandler ), duration.toMillis(), TimeUnit.MILLISECONDS );
             }
         };
@@ -123,6 +121,10 @@ public abstract class Task<A> {
         return async( resolver -> Task.this.execute( a -> a.map(f).fold( no.kantega.concurrent.Task::fail, Function.identity() ).execute( resolver::resolve ) ) );
     }
 
+
+    public <B> Task<B> fold(F<Throwable,B> onFail, F<A,B> onSucc){
+        return async(resolver -> Task.this.execute( triedA -> resolver.resolve( triedA.fold(fail -> Tried.value(onFail.f(fail)),succ -> Tried.value(onSucc.f(succ))) ) ));
+    }
 
     /**
      * Run the other Async task after this task completes, disregarding the outcome of the first Async.
