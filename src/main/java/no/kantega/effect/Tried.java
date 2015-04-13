@@ -48,6 +48,10 @@ public class Tried<A> {
         return value.right().toOption();
     }
 
+    public Option<Throwable> failure(){
+        return value.left().toOption();
+    }
+
     public <X> X fold(F<Throwable, X> g, F<A, X> f) {
         return value.either( g, f );
     }

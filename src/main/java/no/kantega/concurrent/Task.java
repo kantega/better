@@ -130,7 +130,7 @@ public abstract class Task<A> {
     /**
      * Run the other Async task after this task completes, disregarding the outcome of the first Async.
      */
-    public <B> no.kantega.concurrent.Task<B> andThen(final no.kantega.concurrent.Task<B> other) {
+    public <B> Task<B> andThen(final no.kantega.concurrent.Task<B> other) {
         return flatMap( a -> other );
     }
 
@@ -162,22 +162,22 @@ public abstract class Task<A> {
     /**
      * Interface for tasks that are to be run asyncronusly with a callback to resolve the Async.
      */
-    public static interface TaskBody<A> {
-        public void run(Resolver<A> resolver);
+    public interface TaskBody<A> {
+         void run(Resolver<A> resolver);
     }
 
     /**
      * Interface for the callback. Resolves the async
      * The resolver passes the result object to the client.
      */
-    public static interface Resolver<A> {
+    public interface Resolver<A> {
 
         /**
          * Passes the result over to the client. The client is run in the same thread as the caller of resolve
          *
          * @param result
          */
-        public void resolve(Tried<A> result);
+         void resolve(Tried<A> result);
 
     }
 
