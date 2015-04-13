@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -36,8 +37,8 @@ public abstract class Task<A> {
      * Creates an Async that is resolved by a callback.
      *
      * @param runner The handler that must execute the task, and eventually call the resolver to resolve
-     *                the Async task.
-     * @param <A>     The type of the value the task creates asyncronically.
+     *               the Async task.
+     * @param <A>    The type of the value the task creates asyncronically.
      * @return An async that eventually will produce result.
      */
     public static <A> Task<A> async(TaskBody<A> runner) {
@@ -55,7 +56,7 @@ public abstract class Task<A> {
     }
 
 
-    public static <A> Task<A> fail(Throwable t){
+    public static <A> Task<A> fail(Throwable t) {
         return async( aresolver -> aresolver.resolve( Tried.fail( t ) ) );
     }
 
@@ -79,7 +80,7 @@ public abstract class Task<A> {
     public static <A, B> Task<P2<A, B>> and(final Task<A> one, final Task<B> other) {
         return async( (Resolver<P2<A, B>> p2Resolver) -> {
             EffectSynchronizer<A, B> effectSynchronizer =
-                    new EffectSynchronizer<A,B>( p2Resolver );
+                    new EffectSynchronizer<A, B>( p2Resolver );
             one.execute( effectSynchronizer.leftE() );
             other.execute( effectSynchronizer.rightE() );
         } );
@@ -107,7 +108,7 @@ public abstract class Task<A> {
      * @return An Async with the result transformed.
      */
     public <B> Task<B> map(final F<A, B> f) {
-        return async( resolver -> Task.this.execute( a -> resolver.resolve( a.map(f) ) ) );
+        return async( resolver -> Task.this.execute( a -> resolver.resolve( a.map( f ) ) ) );
     }
 
     /**
@@ -118,12 +119,12 @@ public abstract class Task<A> {
      * @return An Async that first executes this task, and then the next task when this task is finished.
      */
     public <B> Task<B> flatMap(final F<A, Task<B>> f) {
-        return async( resolver -> Task.this.execute( a -> a.map(f).fold( no.kantega.concurrent.Task::fail, Function.identity() ).execute( resolver::resolve ) ) );
+        return async( resolver -> Task.this.execute( a -> a.map( f ).fold( no.kantega.concurrent.Task::fail, Function.identity() ).execute( resolver::resolve ) ) );
     }
 
 
-    public <B> Task<B> fold(F<Throwable,B> onFail, F<A,B> onSucc){
-        return async(resolver -> Task.this.execute( triedA -> resolver.resolve( triedA.fold(fail -> Tried.value(onFail.f(fail)),succ -> Tried.value(onSucc.f(succ))) ) ));
+    public <B> Task<B> fold(F<Throwable, B> onFail, F<A, B> onSucc) {
+        return async( resolver -> Task.this.execute( triedA -> resolver.resolve( triedA.fold( fail -> Tried.value( onFail.f( fail ) ), succ -> Tried.value( onSucc.f( succ ) ) ) ) ) );
     }
 
     /**
@@ -134,7 +135,7 @@ public abstract class Task<A> {
     }
 
 
-    public Option<Tried<A>> await(Duration timeout) {
+    public Tried<A> await(Duration timeout) {
         CountDownLatch latch = new CountDownLatch( 1 );
 
         AtomicReference<Tried<A>> ref = new AtomicReference<>();
@@ -146,9 +147,9 @@ public abstract class Task<A> {
         try {
             latch.await( timeout.toMillis(), TimeUnit.MILLISECONDS );
         } catch (InterruptedException e) {
-            return Option.fromNull( ref.get() );
+            return Tried.fail( new TimeoutException( "The task did not complete within " + timeout.toString() ) );
         }
-        return Option.fromNull( ref.get() );
+        return ref.get();
     }
 
 
