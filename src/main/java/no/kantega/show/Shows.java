@@ -1,4 +1,4 @@
-package no.kantega;
+package no.kantega.show;
 
 import fj.Show;
 import fj.data.List;
