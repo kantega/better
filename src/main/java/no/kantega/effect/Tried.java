@@ -72,6 +72,13 @@ public class Tried<A> {
         return value.left().toOption();
     }
 
+    public A orThrow() throws Throwable {
+        if(isThrowable())
+            throw value.left().value();
+        else
+            return value.right().value();
+    }
+
     public <X> X fold(F<Throwable, X> g, F<A, X> f) {
         return value.either( g, f );
     }

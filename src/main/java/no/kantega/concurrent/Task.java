@@ -98,12 +98,8 @@ public abstract class Task<A> {
      * Runs the async after the given delay
      */
     public Task<A> delay(Duration duration, final ScheduledExecutorService executorService) {
-        return new no.kantega.concurrent.Task<A>() {
-            @Override
-            public void execute(final Effect1<Tried<A>> completeHandler) {
-                executorService.schedule( () -> Task.this.execute( completeHandler ), duration.toMillis(), TimeUnit.MILLISECONDS );
-            }
-        };
+        return async( completeHandler ->
+                executorService.schedule( () -> Task.this.execute( completeHandler::resolve ), duration.toMillis(), TimeUnit.MILLISECONDS ));
     }
 
 
@@ -114,7 +110,7 @@ public abstract class Task<A> {
      * @param <B> the type the function f produces
      * @return An Async with the result transformed.
      */
-    public <B> Task<B> map(final F<A, B> f) {
+    public <B> Task<B> map(F<A, B> f) {
         return async( resolver -> Task.this.execute( a -> resolver.resolve( a.map( f ) ) ) );
     }
 
@@ -125,10 +121,22 @@ public abstract class Task<A> {
      * @param <B> the type the next async produces.
      * @return An Async that first executes this task, and then the next task when this task is finished.
      */
-    public <B> Task<B> flatMap(final F<A, Task<B>> f) {
+    public <B> Task<B> flatMap(F<A, Task<B>> f) {
         return async( resolver -> Task.this.execute( a -> a.map( f ).fold( no.kantega.concurrent.Task::fail, Function.identity() ).execute( resolver::resolve ) ) );
     }
 
+
+    public <B> Task<B> mapTried(F<Throwable, B> onFail, F<A, B> onValue) {
+        return async( resolver -> Task.this.execute( result -> resolver.resolve( Tried.value( result.fold( onFail, onValue ) ) ) ) );
+    }
+
+    public <B> Task<B> flatMapTried(F<Throwable,Task<B>> onFail,F<A,Task<B>> onValue){
+        return async( resolver -> {
+                Task.this.execute( result -> {
+                    result.fold(onFail,onValue).execute( resolver::resolve );
+                } );
+        } );
+    }
 
     public <B> Task<B> fold(F<Throwable, B> onFail, F<A, B> onSucc) {
         return async( resolver -> Task.this.execute( triedA -> resolver.resolve( triedA.fold( fail -> Tried.value( onFail.f( fail ) ), succ -> Tried.value( onSucc.f( succ ) ) ) ) ) );
