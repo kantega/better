@@ -72,9 +72,11 @@ public class Tried<A> {
         return value.left().toOption();
     }
 
-    public A orThrow() throws Throwable {
-        if(isThrowable())
-            throw value.left().value();
+    public A orThrow() throws Exception {
+        if(isThrowable()){
+            Throwable t = value.left().value();
+            throw new Exception( "Tried failed with "+t.getMessage(),t );
+        }
         else
             return value.right().value();
     }
