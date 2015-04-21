@@ -23,6 +23,16 @@ public class Tried<A> {
         return new Tried<>( Either.left( t ) );
     }
 
+    public static <A, B> F<A, Tried<B>> tryF(F<A, B> f) {
+        return a -> {
+            try {
+                return Tried.value( f.f( a ) );
+            } catch (Throwable t) {
+                return Tried.fail( t );
+            }
+        };
+    }
+
     public <B> Tried<B> map(F<A, B> f) {
         return new Tried<>( value.right().map( f ) );
     }
@@ -32,7 +42,7 @@ public class Tried<A> {
     }
 
 
-    public <B> Tried<P2<A,B>> and(Tried<B> other){
+    public <B> Tried<P2<A, B>> and(Tried<B> other) {
         return flatMap( valueA -> other.map( valueB -> (p( valueA, valueB )) ) );
     }
 
@@ -48,7 +58,7 @@ public class Tried<A> {
         return value.right().toOption();
     }
 
-    public Option<Throwable> failure(){
+    public Option<Throwable> failure() {
         return value.left().toOption();
     }
 
