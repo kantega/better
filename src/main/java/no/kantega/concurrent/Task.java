@@ -61,7 +61,14 @@ public abstract class Task<A> {
     }
 
     public static <A> Task<A> call(final Supplier<A> task) {
-        return async( validationResolver -> validationResolver.resolve( Tried.value( task.get() ) ) );
+        return async( validationResolver -> validationResolver.resolve( Tried.tryCall( task ) ) );
+    }
+
+    public static Task<Unit> callVoid(Runnable task) {
+        return async( validationResolver -> validationResolver.resolve( Tried.tryCall( () -> {
+            task.run();
+            return Unit.unit();
+        } ) ) );
     }
 
     /**
@@ -163,7 +170,7 @@ public abstract class Task<A> {
      * Interface for tasks that are to be run asyncronusly with a callback to resolve the Async.
      */
     public interface TaskBody<A> {
-         void run(Resolver<A> resolver);
+        void run(Resolver<A> resolver);
     }
 
     /**
@@ -177,7 +184,7 @@ public abstract class Task<A> {
          *
          * @param result
          */
-         void resolve(Tried<A> result);
+        void resolve(Tried<A> result);
 
     }
 

@@ -5,6 +5,8 @@ import fj.P2;
 import fj.data.Either;
 import fj.data.Option;
 
+import java.util.function.Supplier;
+
 import static fj.P.p;
 
 public class Tried<A> {
@@ -31,6 +33,14 @@ public class Tried<A> {
                 return Tried.fail( t );
             }
         };
+    }
+
+    public static <A> Tried<A> tryCall(Supplier<A> call) {
+        try {
+            return Tried.value( call.get() );
+        } catch (Throwable t) {
+            return Tried.fail( t );
+        }
     }
 
     public <B> Tried<B> map(F<A, B> f) {
