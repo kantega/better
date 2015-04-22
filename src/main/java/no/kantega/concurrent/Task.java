@@ -45,7 +45,6 @@ public abstract class Task<A> {
         return new Task<A>() {
             @Override
             public void execute(final Effect1<Tried<A>> completeHandler) {
-                out.println( "Running execute" );
                 try {
                     runner.run( completeHandler::f );
                 } catch (Throwable t) {
