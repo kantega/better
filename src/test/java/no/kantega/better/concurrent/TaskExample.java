@@ -8,34 +8,40 @@ import no.kantega.effect.Tried;
 import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class TaskExample {
 
     public static void main(String[] args) throws Exception {
 
-        Executor executor = Executors.newSingleThreadExecutor();
 
-        Task<String> stringProduceingTask = Task.async( new TaskBody<String>() {
-            @Override public void run(Resolver<String> resolver) {
-                executor.execute( () -> {
+        Task<String> stringProduceingTask = Task.async( resolver -> {
                     try {
                         Thread.sleep( 4000 );
+                        System.out.println("*");
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                    resolver.resolve( Tried.value( "Some string" ) );
+                    resolver.resolve( Tried.value( Thread.currentThread().getName() + "  Some string" ) );
                 }
-
-            );
-
-        }
-    } );
+        );
 
 
-        stringProduceingTask.execute( tried -> {
+        stringProduceingTask.<String>flatMap( rsult1 -> Task.async( resolver -> {
+                    try {
+                        Thread.sleep( 4000 );
+                        System.out.println("*");
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    resolver.resolve( Tried.value( rsult1 + " - " + Thread.currentThread().getName() + "  Some string " ) );
+                }
+        ) ).execute( tried -> {
             String str = tried.fold( Throwable::getMessage, string -> string );
             System.out.println( str );
         } );
+
+        Task.defaultExecutors.awaitTermination( 10, TimeUnit.SECONDS );
 
 
     }

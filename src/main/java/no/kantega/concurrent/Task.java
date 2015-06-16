@@ -1,9 +1,6 @@
 package no.kantega.concurrent;
 
-import fj.F;
-import fj.Function;
-import fj.P2;
-import fj.Unit;
+import fj.*;
 import fj.control.parallel.Actor;
 import fj.control.parallel.Strategy;
 import fj.data.Either;
@@ -12,10 +9,7 @@ import fj.function.Effect1;
 import no.kantega.effect.Tried;
 
 import java.time.Duration;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -29,11 +23,14 @@ import static java.lang.System.out;
 public abstract class Task<A> {
 
 
+    public final static ExecutorService defaultExecutors =
+            Executors.newFixedThreadPool( 2 );
+
     private Task() {
     }
 
     /**
-     * Creates an Async that is resolved by a callback.
+     * Creates an Async that is resolved by a callback in a different thread.
      *
      * @param runner The handler that must execute the task, and eventually call the resolver to resolve
      *               the Async task.
@@ -41,27 +38,63 @@ public abstract class Task<A> {
      * @return An async that eventually will produce result.
      */
     public static <A> Task<A> async(TaskBody<A> runner) {
+        return async( runner, Strategy.executorStrategy( defaultExecutors ) );
+    }
+
+    /**
+     * Creates an Async that is resolved by a callback.
+     *
+     * @param runner            The handler that must execute the task, and eventually call the resolver to resolve
+     *                          the Async task.
+     * @param <A>               The type of the value the task creates asyncronically.
+     * @param executionStrategy The execution strategy to use when executing the callback
+     * @return An async that eventually will produce result.
+     */
+    public static <A> Task<A> async(TaskBody<A> runner, Strategy<Unit> executionStrategy) {
         return new Task<A>() {
             @Override
             public void execute(final Effect1<Tried<A>> completeHandler) {
-                try {
-                    runner.run( completeHandler::f );
-                } catch (Throwable t) {
-                    completeHandler.f( Tried.fail( t ) );
-                }
+                executionStrategy.par( new P1<Unit>() {
+                    @Override public Unit _1() {
+                        try {
+                            runner.run( completeHandler::f );
+                        } catch (Throwable t) {
+                            completeHandler.f( Tried.fail( t ) );
+                        }
+                        return Unit.unit();
+                    }
+                } );
+
             }
         };
     }
 
-
+    /**
+     * Creates a Task that fails
+     * @param t The Throwable it fails with
+     * @param <A> the type parameter
+     * @return a failing Task
+     */
     public static <A> Task<A> fail(Throwable t) {
         return async( aresolver -> aresolver.resolve( Tried.fail( t ) ) );
     }
 
-    public static <A> Task<A> call(final Supplier<A> task) {
-        return async( validationResolver -> validationResolver.resolve( Tried.tryCall( task ) ) );
+    /**
+     * Wraps a supplier in a Task
+     * @param supplier The upplier that is to be called
+     * @param <A> the type the supplier
+     * @return a Task that yields the value of the supplier
+     */
+    public static <A> Task<A> call(final Supplier<A> supplier) {
+        return async( validationResolver -> validationResolver.resolve( Tried.tryCall( supplier ) ) );
     }
 
+
+    /**
+     * Wraps a callable in a Task
+     * @param task The callable to wrap
+     * @return Unit
+     */
     public static Task<Unit> callVoid(Runnable task) {
         return async( validationResolver -> validationResolver.resolve( Tried.tryCall( () -> {
             task.run();
@@ -70,10 +103,10 @@ public abstract class Task<A> {
     }
 
     /**
-     * Puts the argument into a Async.
+     * Puts the argument into a Task.
      */
-    public static <A> Task<A> now(final A a) {
-        return async( aResolver -> aResolver.resolve( Tried.value( a ) ) );
+    public static <A> Task<A> value(final A a) {
+        return async( aResolver -> aResolver.resolve( Tried.value( a ) ), Strategy.<Unit>seqStrategy() );
     }
 
     /**
@@ -95,7 +128,7 @@ public abstract class Task<A> {
      */
     public Task<A> delay(Duration duration, final ScheduledExecutorService executorService) {
         return async( completeHandler ->
-                executorService.schedule( () -> Task.this.execute( completeHandler::resolve ), duration.toMillis(), TimeUnit.MILLISECONDS ));
+                executorService.schedule( () -> Task.this.execute( completeHandler::resolve ), duration.toMillis(), TimeUnit.MILLISECONDS ) );
     }
 
 
@@ -126,11 +159,11 @@ public abstract class Task<A> {
         return async( resolver -> Task.this.execute( result -> resolver.resolve( Tried.value( result.fold( onFail, onValue ) ) ) ) );
     }
 
-    public <B> Task<B> flatMapTried(F<Throwable,Task<B>> onFail,F<A,Task<B>> onValue){
+    public <B> Task<B> flatMapTried(F<Throwable, Task<B>> onFail, F<A, Task<B>> onValue) {
         return async( resolver -> {
-                Task.this.execute( result -> {
-                    result.fold(onFail,onValue).execute( resolver::resolve );
-                } );
+            Task.this.execute( result -> {
+                result.fold( onFail, onValue ).execute( resolver::resolve );
+            } );
         } );
     }
 
@@ -146,7 +179,12 @@ public abstract class Task<A> {
     }
 
 
-    public Tried<A> await(Duration timeout) {
+    /**
+     * Executes the task and awaits the result for the duration, failing if the result is not awailable within the timeout. Prefer to use the async execute() instead
+     * @param timeout
+     * @return
+     */
+    public Tried<A> executeAndAwait(Duration timeout) {
         CountDownLatch latch = new CountDownLatch( 1 );
 
         AtomicReference<Tried<A>> ref = new AtomicReference<>();
@@ -161,6 +199,14 @@ public abstract class Task<A> {
             return Tried.fail( new TimeoutException( "The task did not complete within " + timeout.toString() ) );
         }
         return ref.get();
+    }
+
+    /**
+     * Executes the task and gets the result. Prefer to use the async execute() instead
+     * @return
+     */
+    public Tried<A> executeAndGet(){
+        return executeAndAwait( Duration.ofMinutes( 10 ) );
     }
 
 
