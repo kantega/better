@@ -71,6 +71,10 @@ public class Spec {
         return Show.showS( new F<T, String>() {
             @Override
             public String f(T t) {
+                if (t instanceof String)
+                    return (String)t;
+                if(t instanceof Number)
+                    return t.toString();
                 if (t instanceof List)
                     return "List(" + Show.listShow( reflectionShow() ).showS( (List) t ) + ")";
                 else if (t instanceof P1)

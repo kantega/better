@@ -23,9 +23,8 @@ import static java.lang.System.out;
 
 /**
  * Defines an asynchronous calculation of a value. The async task finishes when it is _resolved_ by calling the Resolver callback that is provided
- * when the Async is created. The result of the computation is provided to a continuation (of type Effect or Consumer). The value cannon be extracted,
- * hence the Async can never block.
- * The Async type is pure except the method execute, which executes the continuation.
+ * when the Async is created. The result of the computation is provided to a continuation (of type Effect or Consumer).
+ * The Async type is pure except the methods execute and await, which executes the continuation.
  */
 public abstract class Task<A> {
 
@@ -74,9 +73,7 @@ public abstract class Task<A> {
      * Puts the argument into a Async.
      */
     public static <A> Task<A> now(final A a) {
-        return async( aResolver -> {
-            aResolver.resolve( Tried.value( a ) );
-        } );
+        return async( aResolver -> aResolver.resolve( Tried.value( a ) ) );
     }
 
     /**
@@ -195,20 +192,6 @@ public abstract class Task<A> {
 
     }
 
-    public static class RetryContext<A> {
-
-        public final A value;
-
-        public final int retries;
-
-        public final Duration elapsed;
-
-        public RetryContext(final A value, final int retries, final Duration elapsed) {
-            this.value = value;
-            this.retries = retries;
-            this.elapsed = elapsed;
-        }
-    }
 
     /*
     Gates two resolvers by calling the final resolver with both arguments when both resolvers have been resolved, possibly in different threads.
