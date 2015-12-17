@@ -18,7 +18,7 @@ public class TaskExample {
         Task<String> stringProduceingTask = Task.async( resolver -> {
                     try {
                         Thread.sleep( 4000 );
-                        System.out.println("*");
+                        System.out.println( "*" );
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -26,20 +26,35 @@ public class TaskExample {
                 }
         );
 
-
-        stringProduceingTask.<String>flatMap( rsult1 -> Task.async( resolver -> {
+        Task<String> someOtherStringProduceingTask = Task.async( resolver -> {
                     try {
                         Thread.sleep( 4000 );
-                        System.out.println("*");
+                        System.out.println( "*" );
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                    resolver.resolve( Tried.value( rsult1 + " - " + Thread.currentThread().getName() + "  Some string " ) );
+                    resolver.resolve( Tried.value( Thread.currentThread().getName() + "  Some string" ) );
                 }
-        ) ).execute( tried -> {
-            String str = tried.fold( Throwable::getMessage, string -> string );
-            System.out.println( str );
-        } );
+        );
+
+        Task<String> oneThenOther =
+                stringProduceingTask.
+                        flatMap( rsult1 -> someOtherStringProduceingTask.map( rsult2 -> rsult1 + " " + rsult2 ) );
+
+        oneThenOther
+                .execute( tried -> System.out.println( tried.fold( Throwable::getMessage, string -> string ) ) );
+
+
+        Task<String> immediateStringProducer =
+                Task.value( "Immediate" );
+
+
+        System.out.println( immediateStringProducer.executeAndGet().fold( Throwable::getMessage, s -> s ) );
+
+        oneThenOther
+                .flatMap( both -> immediateStringProducer.map( imm -> imm + " " + both ) )
+                .execute( tried -> System.out.println( tried.fold( Throwable::getMessage, string -> string ) ) );
+
 
         Task.defaultExecutors.awaitTermination( 10, TimeUnit.SECONDS );
 

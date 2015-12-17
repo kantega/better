@@ -43,12 +43,7 @@ public class Spec {
             } );
 
             return result._2().isFalsified();
-        } ).map( new F<P2<String, CheckResult>, String>() {
-            public String f(final P2<String, CheckResult> result) {
-                return result._1() + ": " + summary( argReflectionShow() ).showS( result._2() );
-
-            }
-        } );
+        } ).map(result -> result._1() + ": " + summary( argReflectionShow() ).showS( result._2() ));
         Assert.assertTrue( showList.showS( resultSummary ), resultSummary.isEmpty() );
     }
 
