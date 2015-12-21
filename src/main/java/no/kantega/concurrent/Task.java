@@ -135,7 +135,7 @@ public abstract class Task<A> {
      * @return An Async with the result transformed.
      */
     public <B> Task<B> map(F<A, B> f) {
-        return async(resolver -> Task.this.execute(a -> resolver.resolve(a.map(f))));
+        return flatMap(a->Task.value(f.f(a)));
     }
 
     /**
@@ -146,7 +146,12 @@ public abstract class Task<A> {
      * @return An Async that first executes this task, and then the next task when this task is finished.
      */
     public <B> Task<B> flatMap(F<A, Task<B>> f) {
-        return async(resolver -> Task.this.execute(a -> a.map(f).fold(no.kantega.concurrent.Task::fail, Function.identity()).execute(resolver::resolve)));
+        return new Task<B>() {
+            @Override
+            public void execute(Effect1<Tried<B>> completeHandler, Strategy<Unit> executionStrategy) {
+                Task.this.execute(task1Tried-> task1Tried.fold(Task::<B>fail, f::f).execute(completeHandler, executionStrategy),executionStrategy);
+            }
+        };
     }
 
 
