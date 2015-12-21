@@ -135,7 +135,7 @@ public abstract class Task<A> {
      * @return An Async with the result transformed.
      */
     public <B> Task<B> map(F<A, B> f) {
-        return flatMap(a->Task.value(f.f(a)));
+        return flatMap(a -> Task.value(f.f(a)));
     }
 
     /**
@@ -148,23 +148,25 @@ public abstract class Task<A> {
     public <B> Task<B> flatMap(F<A, Task<B>> f) {
         return new Task<B>() {
             @Override
-            public void execute(Effect1<Tried<B>> completeHandler, Strategy<Unit> executionStrategy) {
-                Task.this.execute(task1Tried-> task1Tried.fold(Task::<B>fail, f::f).execute(completeHandler, executionStrategy),executionStrategy);
+            public void execute(Strategy<Unit> executionStrategy, Effect1<Tried<B>> completeHandler) {
+                Task.this.execute(executionStrategy, task1Tried -> task1Tried.fold(Task::<B>fail, f::f).execute(executionStrategy, completeHandler));
             }
         };
     }
 
 
     public <B> Task<B> mapTried(F<Throwable, B> onFail, F<A, B> onValue) {
-        return async(resolver -> Task.this.execute(result -> resolver.resolve(Tried.value(result.fold(onFail, onValue)))));
+        return flatMapTried(F1Functions.andThen(onFail, Task::value), F1Functions.andThen(onValue, Task::value));
     }
 
     public <B> Task<B> flatMapTried(F<Throwable, Task<B>> onFail, F<A, Task<B>> onValue) {
-        return async(resolver -> {
-            Task.this.execute(result -> {
-                result.fold(onFail, onValue).execute(resolver::resolve);
-            });
-        });
+        return new Task<B>() {
+            @Override
+            public void execute(Strategy<Unit> executionStrategy, Effect1<Tried<B>> completeHandler) {
+                Task.this.execute(executionStrategy, task1Tried -> task1Tried.fold(onFail, onValue).execute(executionStrategy, completeHandler));
+            }
+        };
+
     }
 
     public <B> Task<B> fold(F<Throwable, B> onFail, F<A, B> onSucc) {
@@ -181,15 +183,17 @@ public abstract class Task<A> {
     /**
      * Executes the task and awaits the result for the duration, failing if the result is not awailable within the timeout. Prefer to use the async execute() instead.
      * Uses the default execution strategy
+     *
      * @param timeout
      * @return
      */
-    public Tried<A> executeAndAwait(Duration timeout){
-        return executeAndAwait(timeout,defaultStrategy);
+    public Tried<A> executeAndAwait(Duration timeout) {
+        return executeAndAwait(timeout, defaultStrategy);
     }
 
     /**
      * Executes the task and awaits the result for the duration, failing if the result is not awailable within the timeout. Prefer to use the async execute() instead
+     *
      * @param executionStrategy The parallell execution strategy
      * @param timeout
      * @return
@@ -233,13 +237,13 @@ public abstract class Task<A> {
      * Runs the task using the default strategy
      */
     public void execute(Effect1<Tried<A>> completeHandler) {
-        execute(completeHandler, Strategy.executorStrategy(defaultExecutors));
+        execute(Strategy.executorStrategy(defaultExecutors), completeHandler);
     }
 
     /**
      * Runs the task using the supplied parallell strategy
      */
-    public abstract void execute(Effect1<Tried<A>> completeHandler, Strategy<Unit> executionStrategy);
+    public abstract void execute(Strategy<Unit> executionStrategy, Effect1<Tried<A>> completeHandler);
 
 
     /**
