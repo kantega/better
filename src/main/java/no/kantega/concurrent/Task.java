@@ -23,14 +23,18 @@ import static java.lang.System.out;
 public abstract class Task<A> {
 
 
-    public final static ExecutorService defaultExecutors =
-            Executors.newFixedThreadPool( 2 );
+    public static final ExecutorService defaultExecutors =
+            Executors.newFixedThreadPool(2);
+
+    public static Strategy<Unit> defaultStrategy =
+            Strategy.executorStrategy(defaultExecutors);
 
     private Task() {
     }
 
+
     /**
-     * Creates an Async that is resolved by a callback in a different thread.
+     * Creates an Async that is resolved by a callback.
      *
      * @param runner The handler that must execute the task, and eventually call the resolver to resolve
      *               the Async task.
@@ -38,32 +42,20 @@ public abstract class Task<A> {
      * @return An async that eventually will produce result.
      */
     public static <A> Task<A> async(TaskBody<A> runner) {
-        return async( runner, Strategy.executorStrategy( defaultExecutors ) );
-    }
-
-    /**
-     * Creates an Async that is resolved by a callback.
-     *
-     * @param runner            The handler that must execute the task, and eventually call the resolver to resolve
-     *                          the Async task.
-     * @param <A>               The type of the value the task creates asyncronically.
-     * @param executionStrategy The execution strategy to use when executing the callback
-     * @return An async that eventually will produce result.
-     */
-    public static <A> Task<A> async(TaskBody<A> runner, Strategy<Unit> executionStrategy) {
         return new Task<A>() {
             @Override
-            public void execute(final Effect1<Tried<A>> completeHandler) {
-                executionStrategy.par( new P1<Unit>() {
-                    @Override public Unit _1() {
+            public void execute(final Effect1<Tried<A>> completeHandler, Strategy<Unit> executionStrategy) {
+                executionStrategy.par(new P1<Unit>() {
+                    @Override
+                    public Unit _1() {
                         try {
-                            runner.run( completeHandler::f );
+                            runner.run(completeHandler::f);
                         } catch (Throwable t) {
-                            completeHandler.f( Tried.fail( t ) );
+                            completeHandler.f(Tried.fail(t));
                         }
                         return Unit.unit();
                     }
-                } );
+                });
 
             }
         };
@@ -71,42 +63,45 @@ public abstract class Task<A> {
 
     /**
      * Creates a Task that fails
-     * @param t The Throwable it fails with
+     *
+     * @param t   The Throwable it fails with
      * @param <A> the type parameter
      * @return a failing Task
      */
     public static <A> Task<A> fail(Throwable t) {
-        return async( aresolver -> aresolver.resolve( Tried.fail( t ) ) );
+        return async(aresolver -> aresolver.resolve(Tried.fail(t)));
     }
 
     /**
      * Wraps a supplier in a Task
+     *
      * @param supplier The upplier that is to be called
-     * @param <A> the type the supplier
+     * @param <A>      the type the supplier
      * @return a Task that yields the value of the supplier
      */
     public static <A> Task<A> call(final Supplier<A> supplier) {
-        return async( validationResolver -> validationResolver.resolve( Tried.tryCall( supplier ) ) );
+        return async(validationResolver -> validationResolver.resolve(Tried.tryCall(supplier)));
     }
 
 
     /**
      * Wraps a callable in a Task
+     *
      * @param task The callable to wrap
      * @return Unit
      */
     public static Task<Unit> callVoid(Runnable task) {
-        return async( validationResolver -> validationResolver.resolve( Tried.tryCall( () -> {
+        return async(validationResolver -> validationResolver.resolve(Tried.tryCall(() -> {
             task.run();
             return Unit.unit();
-        } ) ) );
+        })));
     }
 
     /**
      * Puts the argument into a Task.
      */
     public static <A> Task<A> value(final A a) {
-        return async( aResolver -> aResolver.resolve( Tried.value( a ) ), Strategy.<Unit>seqStrategy() );
+        return async(aResolver -> aResolver.resolve(Tried.value(a)));
     }
 
     /**
@@ -114,12 +109,12 @@ public abstract class Task<A> {
      * Uses the first Asyncs startegy to call the continuation. The tasks are run in parallell if permitted by the executor.
      */
     public static <A, B> Task<P2<A, B>> and(final Task<A> one, final Task<B> other) {
-        return async( (Resolver<P2<A, B>> p2Resolver) -> {
+        return async((Resolver<P2<A, B>> p2Resolver) -> {
             EffectSynchronizer<A, B> effectSynchronizer =
-                    new EffectSynchronizer<A, B>( p2Resolver );
-            one.execute( effectSynchronizer.leftE() );
-            other.execute( effectSynchronizer.rightE() );
-        } );
+                    new EffectSynchronizer<A, B>(p2Resolver);
+            one.execute(effectSynchronizer.leftE());
+            other.execute(effectSynchronizer.rightE());
+        });
     }
 
 
@@ -127,8 +122,8 @@ public abstract class Task<A> {
      * Runs the async after the given delay
      */
     public Task<A> delay(Duration duration, final ScheduledExecutorService executorService) {
-        return async( completeHandler ->
-                executorService.schedule( () -> Task.this.execute( completeHandler::resolve ), duration.toMillis(), TimeUnit.MILLISECONDS ) );
+        return async(completeHandler ->
+                executorService.schedule(() -> Task.this.execute(completeHandler::resolve), duration.toMillis(), TimeUnit.MILLISECONDS));
     }
 
 
@@ -140,7 +135,7 @@ public abstract class Task<A> {
      * @return An Async with the result transformed.
      */
     public <B> Task<B> map(F<A, B> f) {
-        return async( resolver -> Task.this.execute( a -> resolver.resolve( a.map( f ) ) ) );
+        return async(resolver -> Task.this.execute(a -> resolver.resolve(a.map(f))));
     }
 
     /**
@@ -151,69 +146,95 @@ public abstract class Task<A> {
      * @return An Async that first executes this task, and then the next task when this task is finished.
      */
     public <B> Task<B> flatMap(F<A, Task<B>> f) {
-        return async( resolver -> Task.this.execute( a -> a.map( f ).fold( no.kantega.concurrent.Task::fail, Function.identity() ).execute( resolver::resolve ) ) );
+        return async(resolver -> Task.this.execute(a -> a.map(f).fold(no.kantega.concurrent.Task::fail, Function.identity()).execute(resolver::resolve)));
     }
 
 
     public <B> Task<B> mapTried(F<Throwable, B> onFail, F<A, B> onValue) {
-        return async( resolver -> Task.this.execute( result -> resolver.resolve( Tried.value( result.fold( onFail, onValue ) ) ) ) );
+        return async(resolver -> Task.this.execute(result -> resolver.resolve(Tried.value(result.fold(onFail, onValue)))));
     }
 
     public <B> Task<B> flatMapTried(F<Throwable, Task<B>> onFail, F<A, Task<B>> onValue) {
-        return async( resolver -> {
-            Task.this.execute( result -> {
-                result.fold( onFail, onValue ).execute( resolver::resolve );
-            } );
-        } );
+        return async(resolver -> {
+            Task.this.execute(result -> {
+                result.fold(onFail, onValue).execute(resolver::resolve);
+            });
+        });
     }
 
     public <B> Task<B> fold(F<Throwable, B> onFail, F<A, B> onSucc) {
-        return async( resolver -> Task.this.execute( triedA -> resolver.resolve( triedA.fold( fail -> Tried.value( onFail.f( fail ) ), succ -> Tried.value( onSucc.f( succ ) ) ) ) ) );
+        return async(resolver -> Task.this.execute(triedA -> resolver.resolve(triedA.fold(fail -> Tried.value(onFail.f(fail)), succ -> Tried.value(onSucc.f(succ))))));
     }
 
     /**
      * Run the other Async task after this task completes, disregarding the outcome of the first Async.
      */
     public <B> Task<B> andThen(final no.kantega.concurrent.Task<B> other) {
-        return flatMap( a -> other );
+        return flatMap(a -> other);
     }
 
-
     /**
-     * Executes the task and awaits the result for the duration, failing if the result is not awailable within the timeout. Prefer to use the async execute() instead
+     * Executes the task and awaits the result for the duration, failing if the result is not awailable within the timeout. Prefer to use the async execute() instead.
+     * Uses the default execution strategy
      * @param timeout
      * @return
      */
-    public Tried<A> executeAndAwait(Duration timeout) {
-        CountDownLatch latch = new CountDownLatch( 1 );
+    public Tried<A> executeAndAwait(Duration timeout){
+        return executeAndAwait(timeout,defaultStrategy);
+    }
+
+    /**
+     * Executes the task and awaits the result for the duration, failing if the result is not awailable within the timeout. Prefer to use the async execute() instead
+     * @param executionStrategy The parallell execution strategy
+     * @param timeout
+     * @return
+     */
+    public Tried<A> executeAndAwait(Duration timeout, Strategy<Unit> executionStrategy) {
+        CountDownLatch latch = new CountDownLatch(1);
 
         AtomicReference<Tried<A>> ref = new AtomicReference<>();
 
-        execute( a -> {
-            ref.set( a );
+        execute(a -> {
+            ref.set(a);
             latch.countDown();
-        } );
+        }, executionStrategy);
         try {
-            latch.await( timeout.toMillis(), TimeUnit.MILLISECONDS );
+            latch.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
-            return Tried.fail( new TimeoutException( "The task did not complete within " + timeout.toString() ) );
+            return Tried.fail(new TimeoutException("The task did not complete within " + timeout.toString()));
         }
         return ref.get();
     }
 
     /**
-     * Executes the task and gets the result. Prefer to use the async execute() instead
+     * Executes the task and gets the result using the default execution strategy. Prefer to use the async execute() instead
+     *
      * @return
      */
-    public Tried<A> executeAndGet(){
-        return executeAndAwait( Duration.ofMinutes( 10 ) );
+    public Tried<A> executeAndGet() {
+        return executeAndGet(defaultStrategy);
     }
 
+    /**
+     * Executes the task and gets the result. Prefer to use the async execute() instead
+     *
+     * @return
+     */
+    public Tried<A> executeAndGet(Strategy<Unit> executionStrategy) {
+        return executeAndAwait(Duration.ofMinutes(10), executionStrategy);
+    }
 
     /**
-     * Runs the task
+     * Runs the task using the default strategy
      */
-    public abstract void execute(Effect1<Tried<A>> completeHandler);
+    public void execute(Effect1<Tried<A>> completeHandler) {
+        execute(completeHandler, Strategy.executorStrategy(defaultExecutors));
+    }
+
+    /**
+     * Runs the task using the supplied parallell strategy
+     */
+    public abstract void execute(Effect1<Tried<A>> completeHandler, Strategy<Unit> executionStrategy);
 
 
     /**
@@ -256,38 +277,37 @@ public abstract class Task<A> {
         EffectSynchronizer(final Resolver<P2<A, B>> targetEffect) {
             //Actor that ensures no sharing of state bewteen threads
             actor =
-                    Actor.actor( Strategy.<Unit>seqStrategy(), new Effect1<Either<Tried<A>, Tried<B>>>() {
+                    Actor.actor(Strategy.<Unit>seqStrategy(), new Effect1<Either<Tried<A>, Tried<B>>>() {
                         @Override
                         public void f(final Either<Tried<A>, Tried<B>> value) {
                             if (value.isLeft()) {
-                                aValue = Option.some( value.left().value() );
+                                aValue = Option.some(value.left().value());
 
                                 if (bValue.isSome()) {
-                                    targetEffect.resolve( aValue.some().and( bValue.some() ) );
+                                    targetEffect.resolve(aValue.some().and(bValue.some()));
                                 }
-                            }
-                            else {
-                                bValue = Option.some( value.right().value() );
+                            } else {
+                                bValue = Option.some(value.right().value());
 
                                 if (aValue.isSome()) {
-                                    targetEffect.resolve( aValue.some().and( bValue.some() ) );
+                                    targetEffect.resolve(aValue.some().and(bValue.some()));
                                 }
                             }
                         }
-                    } );
+                    });
         }
 
 
         private void handle(Either<Tried<A>, Tried<B>> value) {
-            actor.act( value );
+            actor.act(value);
         }
 
         public Effect1<Tried<A>> leftE() {
-            return a -> handle( Either.<Tried<A>, Tried<B>>left( a ) );
+            return a -> handle(Either.<Tried<A>, Tried<B>>left(a));
         }
 
         public Effect1<Tried<B>> rightE() {
-            return b -> handle( Either.<Tried<A>, Tried<B>>right( b ) );
+            return b -> handle(Either.<Tried<A>, Tried<B>>right(b));
         }
     }
 }
