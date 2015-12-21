@@ -1,5 +1,6 @@
 package no.kantega.better.concurrent;
 
+import fj.control.parallel.Strategy;
 import no.kantega.concurrent.Task;
 import no.kantega.concurrent.Task.Resolver;
 import no.kantega.concurrent.Task.TaskBody;
@@ -15,48 +16,38 @@ public class TaskExample {
     public static void main(String[] args) throws Exception {
 
 
-        Task<String> stringProduceingTask = Task.async( resolver -> {
-                    try {
-                        Thread.sleep( 4000 );
-                        System.out.println( "*" );
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    resolver.resolve( Tried.value( Thread.currentThread().getName() + "  Some string" ) );
+        Task<String> stringProduceingTask = Task.async(resolver -> {
+                    System.out.println("*");
+                    resolver.resolve(Tried.value(Thread.currentThread().getName() + "-Some string"));
                 }
         );
 
-        Task<String> someOtherStringProduceingTask = Task.async( resolver -> {
-                    try {
-                        Thread.sleep( 4000 );
-                        System.out.println( "*" );
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    resolver.resolve( Tried.value( Thread.currentThread().getName() + "  Some string" ) );
+        Task<String> someOtherStringProduceingTask = Task.async(resolver -> {
+                    System.out.println("**");
+                    resolver.resolve(Tried.value(Thread.currentThread().getName() + "-Some other string"));
                 }
         );
 
         Task<String> oneThenOther =
                 stringProduceingTask.
-                        flatMap( rsult1 -> someOtherStringProduceingTask.map( rsult2 -> rsult1 + " " + rsult2 ) );
+                        flatMap(rsult1 -> someOtherStringProduceingTask.map(rsult2 -> rsult1 + " " + rsult2));
 
         oneThenOther
-                .execute( tried -> System.out.println( tried.fold( Throwable::getMessage, string -> string ) ) );
+                .execute(tried -> System.out.println(tried.fold(Throwable::getMessage, string -> string)));
 
 
         Task<String> immediateStringProducer =
-                Task.value( "Immediate" );
+                Task.value("Immediate");
 
 
-        System.out.println( immediateStringProducer.executeAndGet().fold( Throwable::getMessage, s -> s ) );
+        System.out.println(immediateStringProducer.executeAndGet().fold(Throwable::getMessage, s -> s));
 
         oneThenOther
-                .flatMap( both -> immediateStringProducer.map( imm -> imm + " " + both ) )
-                .execute( tried -> System.out.println( tried.fold( Throwable::getMessage, string -> string ) ) );
+                .flatMap(both -> immediateStringProducer.map(imm -> imm + " " + both))
+                .execute(tried -> System.out.println(tried.fold(Throwable::getMessage, string -> string)));
 
 
-        Task.defaultExecutors.awaitTermination( 10, TimeUnit.SECONDS );
+        Task.defaultExecutors.awaitTermination(10, TimeUnit.SECONDS);
 
 
     }

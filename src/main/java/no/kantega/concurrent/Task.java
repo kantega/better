@@ -156,7 +156,7 @@ public abstract class Task<A> {
 
 
     public <B> Task<B> mapTried(F<Throwable, B> onFail, F<A, B> onValue) {
-        return flatMapTried(F1Functions.andThen(onFail, Task::value), F1Functions.andThen(onValue, Task::value));
+        return flatMapTried(t->Task.value(onFail.f(t)), a->Task.value(onValue.f(a)));
     }
 
     public <B> Task<B> flatMapTried(F<Throwable, Task<B>> onFail, F<A, Task<B>> onValue) {
@@ -237,7 +237,7 @@ public abstract class Task<A> {
      * Runs the task using the default strategy
      */
     public void execute(Effect1<Tried<A>> completeHandler) {
-        execute(Strategy.executorStrategy(defaultExecutors), completeHandler);
+        execute(defaultStrategy, completeHandler);
     }
 
     /**
