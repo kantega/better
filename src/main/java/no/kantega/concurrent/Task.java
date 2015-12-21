@@ -44,7 +44,7 @@ public abstract class Task<A> {
     public static <A> Task<A> async(TaskBody<A> runner) {
         return new Task<A>() {
             @Override
-            public void execute(final Effect1<Tried<A>> completeHandler, Strategy<Unit> executionStrategy) {
+            public void execute(Strategy<Unit> executionStrategy, final Effect1<Tried<A>> completeHandler) {
                 executionStrategy.par(new P1<Unit>() {
                     @Override
                     public Unit _1() {
@@ -203,10 +203,10 @@ public abstract class Task<A> {
 
         AtomicReference<Tried<A>> ref = new AtomicReference<>();
 
-        execute(a -> {
+        execute(executionStrategy,a -> {
             ref.set(a);
             latch.countDown();
-        }, executionStrategy);
+        });
         try {
             latch.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
