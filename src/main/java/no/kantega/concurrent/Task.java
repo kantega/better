@@ -16,9 +16,14 @@ import java.util.function.Supplier;
 import static java.lang.System.out;
 
 /**
- * Defines an asynchronous calculation of a value. The async task finishes when it is _resolved_ by calling the Resolver callback that is provided
- * when the Async is created. The result of the computation is provided to a continuation (of type Effect or Consumer).
- * The Async type is pure except the methods execute and await, which executes the continuation.
+ * The task represents a computation that can be run in an aribitrary thread. A Task object is pure, that is immutable and side effetct
+ * free until it is executed. When it is executed, any effects will be run. Tasks that are bound will run in order. Tasks that are joined by and() will
+ * be run in parallell if possible. Execution of the Task is deferred to the Strategy that is provided to the task when it is executed.
+ * When no Strategy is provided, it will use its defaultStrategy. The default strategy is configurable through the public static variable.
+ *
+ * There are several ways to create a new Task. The most common one is to use the async() contructor, which takes a TaskBody as an argument.
+ * The TaskBody is really just a function run:Resolver->Unit. When run is called, it should execute its computaton, and call resolve() on
+ * the resolver when complete.
  */
 public abstract class Task<A> {
 
